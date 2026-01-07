@@ -24,7 +24,7 @@ export default function LoginPage() {
     setLoading(true)
     const { error } = await supabase.auth.signInWithPassword({ email, password })
     if (error) alert(error.message)
-    else router.push('/dashboard/hunter') 
+    else router.push('/dashboard') 
     setLoading(false)
   }
 
