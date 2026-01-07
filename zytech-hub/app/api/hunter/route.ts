@@ -7,7 +7,7 @@ function cleanPhone(rawPhone: string) {
   
   if (nums.length <= 11) nums = '55' + nums;
   
-  const localNum = nums.substring(2);
+  const localNum = nums.substring(2); 
   let type = 'FIXO';
   if (localNum.length === 11 && localNum[2] === '9') {
     type = 'CELULAR';
@@ -23,24 +23,39 @@ export async function POST(req: Request) {
 
     if (!apiKey) return NextResponse.json({ error: 'API Key não configurada' }, { status: 500 });
 
-    const query = `${termo} em ${cidade}`;
-    const url = `https://maps.googleapis.com/maps/api/place/textsearch/json?query=${encodeURIComponent(query)}&key=${apiKey}&language=pt-BR`;
+    const url = 'https://places.googleapis.com/v1/places:searchText';
 
-    const res = await fetch(url);
+    const textQuery = `${termo} em ${cidade}`;
+
+    const res = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Goog-Api-Key': apiKey,
+        'X-Goog-FieldMask': 'places.displayName,places.formattedAddress,places.nationalPhoneNumber,places.rating,places.userRatingCount'
+      },
+      body: JSON.stringify({
+        textQuery: textQuery,
+        languageCode: "pt-BR"
+      })
+    });
+
     const data = await res.json();
 
-    if (data.status !== 'OK' && data.status !== 'ZERO_RESULTS') {
-      return NextResponse.json({ error: data.error_message || 'Erro no Google' }, { status: 400 });
+    if (!data.places) {
+      console.error("Google Error:", data);
+      return NextResponse.json({ error: 'Nenhum resultado ou erro na API' }, { status: 400 });
     }
 
-    const leads = data.results.map((place: any) => {
-      const { phone, type } = cleanPhone(place.formatted_phone_number);
+    const leads = data.places.map((place: any) => {
+      const { phone, type } = cleanPhone(place.nationalPhoneNumber);
+      
       return {
-        nome: place.name,
-        endereco: place.formatted_address,
+        nome: place.displayName?.text || 'Sem Nome',
+        endereco: place.formattedAddress || 'Endereço não disponível',
         rating: place.rating || 'N/A',
-        total_reviews: place.user_ratings_total || 0,
-        telefone_original: place.formatted_phone_number,
+        total_reviews: place.userRatingCount || 0,
+        telefone_original: place.nationalPhoneNumber || null,
         telefone_api: phone,
         tipo: type
       };
@@ -51,6 +66,7 @@ export async function POST(req: Request) {
     return NextResponse.json({ leads });
 
   } catch (error) {
-    return NextResponse.json({ error: 'Erro interno' }, { status: 500 });
+    console.error(error);
+    return NextResponse.json({ error: 'Erro interno no servidor' }, { status: 500 });
   }
 }
